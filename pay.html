@@ -2,33 +2,31 @@
 <html>
 <head>
   <meta charset="UTF-8">
-  <title>PayHere Secure Gateway</title>
+  <title>PayHere Relay</title>
   <style>
-    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; background: #f8fafc; }
-    .card { background: white; padding: 35px 30px; border-radius: 12px; box-shadow: 0 10px 25px rgba(0,0,0,0.08); text-align: center; max-width: 400px; }
-    .spinner { border: 4px solid #f3f3f3; border-top: 4px solid #7B1113; border-radius: 50%; width: 36px; height: 36px; animation: spin 1s linear infinite; margin: 0 auto 15px; }
-    @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    body { font-family: sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; background: #f8fafc; }
+    .card { background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.08); text-align: center; max-width: 400px; }
   </style>
 </head>
 <body>
   <div class="card">
-    <div class="spinner"></div>
-    <h3 id="msg" style="color: #1e293b; margin: 0 0 8px;">Connecting to PayHere...</h3>
-    <p style="color: #64748b; font-size: 13px; margin: 0;">Securing payment connection. Please wait...</p>
+    <h3 id="msg">Processing...</h3>
+    <p id="sub" style="color: #64748b; font-size: 13px;">Please wait...</p>
   </div>
 
 <script>
   const params = new URLSearchParams(location.search);
   const dataParam = params.get('d');
+  const paymentState = params.get('payment'); // 'success' හෝ 'cancelled'
   const orderId = params.get('order_id');
 
-  // A. PAYMENT එකට යෑම (Submit Form to PayHere)
+  // 1. PAYMENT එකට යෑම
   if (dataParam) {
     try {
       const obj = JSON.parse(decodeURIComponent(escape(atob(dataParam))));
       const form = document.createElement('form');
       form.method = 'POST';
-      form.action = 'https://sandbox.payhere.lk/pay/checkout'; // Live යද්දී: https://www.payhere.lk/pay/checkout
+      form.action = 'https://sandbox.payhere.lk/pay/checkout';
 
       for (const k in obj) {
         if (k === 'sandbox' || k === 'secure_token') continue;
@@ -41,21 +39,34 @@
       document.body.appendChild(form);
       form.submit();
     } catch (e) {
-      document.getElementById('msg').innerText = "Security Error: " + e.message;
+      document.getElementById('msg').innerText = "Error: " + e.message;
     }
   } 
-  // B. PAYMENT එක සාර්ථකව අවසන් වී ආපසු පැමිණීම (PayHere Return Redirect)
-  else if (orderId || params.has('payment_id')) {
-    document.getElementById('msg').innerText = "Payment Successful!";
-    
-    // මුල් Web App එකට ආරක්ෂිතව දන්වා මෙම Tab එක Close කිරීම
+  // 2. ශිෂ්‍යයා CANCEL හෝ BACK TO SITE කළ අවස්ථාව
+  else if (paymentState === 'cancelled') {
+    document.getElementById('msg').innerText = "Payment Cancelled";
+    document.getElementById('msg').style.color = "#dc2626";
+    document.getElementById('sub').innerText = "Transaction was cancelled. Returning...";
+
     if (window.opener) {
-      window.opener.postMessage({
-        type: 'PAYHERE_SUCCESS',
-        orderId: orderId || params.get('payment_id')
+      // මුල් පිටුවට CANCEL වූ බව දන්වයි
+      window.opener.postMessage({ type: 'PAYHERE_CANCELLED' }, '*');
+      setTimeout(() => { window.close(); }, 1500);
+    }
+  }
+  // 3. PAYMENT එක ඇත්තටම SUCCESS වූ අවස්ථාව පමණක්
+  else if (paymentState === 'success') {
+    document.getElementById('msg').innerText = "Payment Successful!";
+    document.getElementById('msg').style.color = "#16a34a";
+    document.getElementById('sub').innerText = "Finalizing application...";
+
+    if (window.opener) {
+      // මුල් පිටුවට SUCCESS වූ බව දන්වයි
+      window.opener.postMessage({ 
+        type: 'PAYHERE_SUCCESS', 
+        orderId: orderId || params.get('payment_id') 
       }, '*');
-      
-      setTimeout(() => { window.close(); }, 1200);
+      setTimeout(() => { window.close(); }, 1500);
     }
   }
 </script>
